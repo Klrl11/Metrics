@@ -13,22 +13,31 @@ namespace MetricsAgent.Jobs
             IServiceScopeFactory serviceScopeFactory)
         {
             _serviceScopeFactory = serviceScopeFactory;
-            _performanceCounter = new PerformanceCounter("Network Interface", "Bytes Total/sec", "Intel[R] Wi-Fi 6 AX201 160MHz");
+            // Получить список доступных сетевых интерфейсов
+            var performanceCounterCategory = new PerformanceCounterCategory("Network Interface");
+            // Получить список наименований доступных сетевых интерфейсов
+            var instanceNames = performanceCounterCategory.GetInstanceNames();
+            if (instanceNames != null && instanceNames.Length > 0)
+                // Получим статистику по первому доступному, активному сетевому интерфейсу
+                _performanceCounter = new PerformanceCounter("Network Interface", "Bytes Total/sec", instanceNames[0]);
         }
         public Task Execute(IJobExecutionContext context)
         {
             using var scope = _serviceScopeFactory.CreateScope();
             var networkMetricsRepository = scope.ServiceProvider.GetService<INetworkMetricsRepository>();
+            // Если существует досупное, активное сетевое устройство, получим
+            // статистику по его использованию, сохраним в бд
+            if (_performanceCounter != null)
+            {
             var networkUsageInPersents = _performanceCounter.NextValue();
             networkMetricsRepository.Add(new Models.NetworkMetric
             {
                 Time = DateTime.Now,
                 Value = (int)networkUsageInPersents
             });
+            }
 
-            //TODO: Выполнение задачи ...
             Debug.WriteLine($"NetworkMetricJob >>> {DateTime.Now}");
-            //new PerformanceCounter("Network Interface", "Bytes Total/sec", "Intel[R] Wi-Fi 6 AX201 160MHz");
             return Task.CompletedTask;
         }
     }
